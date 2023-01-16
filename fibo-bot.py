@@ -50,6 +50,7 @@ for index, row in day_one.iterrows():
 
 
 
+
 plt.axhline(y = levels_[0], color = 'k', linestyle = '-')
 plt.axhline(y = levels_[1], color = 'g', linestyle = '-')
 plt.axhline(y = levels_[2], color = 'b', linestyle = '-')
