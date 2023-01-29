@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from binance.client import Client
 from dateutil.rrule import *
@@ -13,38 +14,44 @@ def getdata(symbol, start):
     frame.set_index('Time', inplace=True)
     frame.index = pd.to_datetime(frame.index, unit='ms')
     frame.Close = frame.Close.astype(float)
+    frame.Low = frame.Low.astype(float)
     return frame
 
 def get_levels(day, df):
     values = [-0.618, 0.618, 1.618]
     series = df.loc[day:][1:2].squeeze()
     diff = float(series.High) - float(series.Low)
-    levels = [series.Close + i * diff for i in values]
+    levels = [series.Low + i * diff for i in values]
     return levels
 
 
-df = getdata('BTCUSDT', '2023-01-02')
-day = '2023-01-02'
+day = '2023-01-23'
+df = getdata('BTCUSDT', day)
+print(df.head())
 series = df.loc[day:][1:2].squeeze()
 diff_ = float(series.High) - float(series.Low)
 ratios_ = [-0.618, 0.618, 1.618]
 levels_ = [i * diff_ + series.Close for i in ratios_]
-sl, entry, tp = get_levels('2023-01-02', df)
+sl, entry, tp = get_levels(day, df)
 day_one = df.loc[day:][:25]
 day_one['price'] = day_one.Open.shift(-1)
-print(day_one)
+# print(series)
+# print(day_one)
 print(levels_)
 in_position = False
 for index, row in day_one.iterrows():
     #entry condition
     if not in_position and row.Close >= entry:
-        print(row.price)
+        print('Buy price: ' + str(row.price))
         in_position = True
     #buy/sell condition
     if in_position:
-        if row.Close >= tp or row.Close <= sl:
-            print(row.price)
+        if float(row.Close) >= float(tp) or float(row.Close) <= float(sl) or row.price is None:#str(index) >= str("23:00:00"):
+            print('Sell price: ' + str(row.price))
             print('Close price: ' + str(row.Close))
+            print('SL: ' + str(sl))
+            print('TP: ' + str(tp))
+            print(index)
             in_position = False
             break
 
@@ -60,32 +67,31 @@ plt.plot(df.loc[day:][:25].Close)
 plt.show()
 
 
-
-def fibo_backtest():
-    months = [day.isoformat() for day in rrule(MONTHLY, dtstart=date(2022, 1, 1), until=date.today())]
-    start_date = date(2023, 1, 1)
-    days = [day.isoformat() for day in rrule(DAILY, dtstart=start_date, until=date.today())]
-    df = getdata('BTCUSDT', str(start_date))
-    for day in days:
-        sl, entry, tp = get_levels(day, df)
-        day_one = df.loc[day:][:25]
-        day_one['price'] = day_one.Open.shift(-1) 
-        in_position = False
-        wallet_count = 0
-        for index, row in day_one.iterrows():
-            #entry condition
-            if not in_position and row.Close >= entry:
-                print('Entry price: ' + str(row.price))
-                in_position = True
-                entry_price = row.price
-            #buy/sell condition
+def fibo_bot():
+    buys, sells = [], []
+    trade_dates = []
+    df = getdata('BTCUSDT', '2023-01-24')
+    df['price'] = df.Open.shift(-1)
+    dates = np.unique(df.index.date)
+    in_position = False
+    for date in dates:
+        for index, row in df[date:][2:].iterrows():
+            if not in_position:
+                sl, entry, tp = get_levels(date, df)
+                if row.Close >= entry:
+                    buys.append(row.price)
+                    trade_dates.append(date)
+                    in_position = True
             if in_position:
                 if row.Close >= tp or row.Close <= sl:
-                    print('Exit price: ' + str(row.price))
+                    sells.append(row.price)
                     in_position = False
-                    wallet_count = wallet_count + (float(row.price) - float(entry_price))
-                    print ('Wallet: ' + str(wallet_count))
                     break
-
-
+    trades = pd.DataFrame([buys, sells])
+    trades.columns = trade_dates
+    trades.index = ['Buy', 'Sell']
+    trades = trades.T
+    trades['PnL'] = trades.Sell.astype(float) - trades.Buy.astype(float)
+    trades['PnL_rel'] = trades.PnL.astype(float) / trades.Buy.astype(float)
+    print((trades.PnL_rel.astype(float) + 1).cumprod())
 
